@@ -323,8 +323,10 @@ def is_dev_url(url):
     :rtype: bool
     """
     parsed_url = urlparse(url).netloc
-    parsed_dev_mn = urlparse(DataONELocations.dev_cn).netloc
-
+    parsed_dev_cn = urlparse(DataONELocations.dev_cn_v2).netloc
+    parsed_dev_mn = urlparse(DataONELocations.dev_mn).netloc
+    if parsed_url == parsed_dev_cn:
+        return True
     if parsed_url == parsed_dev_mn:
         return True
     return False
@@ -340,7 +342,7 @@ def is_in_network(url, network):
     parsed_url = urlparse(url).netloc
     parsed_network = urlparse(network).netloc
     base_dev_mn = urlparse(DataONELocations.dev_mn).netloc
-    base_dev_cn = urlparse(DataONELocations.dev_cn).netloc
+    base_dev_cn = urlparse(DataONELocations.dev_cn_v2).netloc
 
     if parsed_network == base_dev_mn:
         # Then we're in NCEAS Development
@@ -415,9 +417,9 @@ def get_dataone_package_url(repository, pid):
     :return: The package landing page
     """
     if repository in DataONELocations.prod_cn:
-        return str('https://search.dataone.org/#view/'+pid)
+        return str('https://search.dataone.org/view/'+pid)
     elif repository in DataONELocations.dev_mn:
-        return str('https://dev.nceas.ucsb.edu/#view/'+pid)
+        return str('https://dev.nceas.ucsb.edu/view/'+pid)
 
 
 def extract_user_id(jwt_token):
@@ -430,10 +432,21 @@ def extract_user_id(jwt_token):
     :rtype: str, None if failure
     """
     jwt_token = jwt.decode(jwt_token, verify=False)
-    user_id = jwt_token.get('userId', None)
-    if user_id is not None:
-        if is_orcid_id(user_id):
-            return make_url_https(user_id)
+    user_id = jwt_token.get('userId')
+    return user_id
+
+
+def extract_user_name(jwt_token):
+    """
+    Takes a JWT and extracts the 'userId` field. This is used
+    as the package's owner and contact.
+    :param jwt_token: The decoded JWT
+    :type jwt_token: str
+    :return: The ORCID ID
+    :rtype: str, None if failure
+    """
+    jwt_token = jwt.decode(jwt_token, verify=False)
+    user_id = jwt_token.get('fullName')
     return user_id
 
 
@@ -459,15 +472,15 @@ def esc(value):
     return urlparse.quote_plus(value)
 
 
-def strip_html_tags(string):
+def strip_html_tags(html_string):
     """
     Removes HTML tags from a string
-    :param string: The string with HTML
-    :type string: str
+    :param html_string: The string with HTML
+    :type html_string: str
     :return: The string without HTML
     :rtype: str
     """
-    return re.sub('<[^<]+?>', '', string)
+    return re.sub('<[^<]+?>', '', html_string)
 
 
 def get_directory(user_id):
@@ -495,6 +508,30 @@ def make_url_https(url):
     """
     parsed = urlparse(url)
     return parsed._replace(scheme="https").geturl()
+
+
+def make_url_http(url):
+    """
+    Given an https url, make it http
+     :param url: The http url
+    :type url: str
+    :return: The url as https
+    :rtype: str
+    """
+    parsed = urlparse(url)
+    return parsed._replace(scheme="http").geturl()
+
+
+def get_resource_map_user(user_id):
+    """
+    :param user_id: The user ORCID
+    :type user_id: str
+    :return: An http version of the user
+    :rtype: str
+    """
+    if is_orcid_id(user_id):
+        return make_url_http(user_id)
+    return user_id
 
 
 def get_file_md5(file_object, gc):
@@ -536,6 +573,20 @@ def compute_md5(file):
     return md5
 
 
+def get_item_identifier(item_id, gc):
+    """
+    Returns the identifier field in an item's meta field
+    :param item_id: The item's ID
+    :param gc: The Girder Client
+    :type item_id: str
+    :return: The item's identifier
+    """
+    item = gc.getItem(item_id)
+    config = item.get('meta')
+    if config:
+        return config.get('identifier')
+
+
 def filter_items(item_ids, gc):
     """
     Take a list of item ids and determine whether it:
@@ -555,6 +606,8 @@ def filter_items(item_ids, gc):
 
     # Holds item_ids for DataONE objects
     dataone_objects = list()
+    # Hold the DataONE pids
+    dataone_pids = list()
     # Holds item_ids for files not in DataONE
     remote_objects = list()
     # Holds file dicts for local objects
@@ -565,26 +618,26 @@ def filter_items(item_ids, gc):
     for item_id in item_ids:
         # Check if it points do a dataone objbect
         url = get_remote_url(item_id, gc)
-        if url is not None:
-            if is_dataone_url(url):
+        if url:
+            if is_dataone_url(url) or is_dev_url(url):
                 dataone_objects.append(item_id)
+                dataone_pids.append(get_item_identifier(item_id, gc))
                 continue
 
             """
             If there is a url, and it's not pointing to a DataONE resource, then assume
             it's pointing to an external object
             """
-            logging.debug('Adding remote object')
             remote_objects.append(item_id)
             continue
 
         # If the file wasn't linked to a remote location, then it must exist locally. This
         # is a list of girder.models.File objects
-        logging.debug('Adding local object')
         local_objects.append(get_file_item(item_id, gc))
         local_items.append(item_id)
 
     return {'dataone': dataone_objects,
+            'dataone_pids': dataone_pids,
             'remote': remote_objects,
             'local_files': local_objects,
             'local_items': local_items}
