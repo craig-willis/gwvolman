@@ -291,8 +291,9 @@ def build_image(image_id, repo_url, commit_id):
 
 
 @girder_job(title='Publish Tale')
-@app.task
-def publish(item_ids,
+@app.task(bind=True)
+def publish(self,
+            item_ids,
             tale,
             dataone_node,
             dataone_auth_token,
@@ -301,8 +302,13 @@ def publish(item_ids,
             prov_info,
             license_id):
     """
+<<<<<<< HEAD
     Publish a Tale to DataONE.
 
+=======
+    Publishes a Tale to DataONE
+    :param self: self
+>>>>>>> 0870cba... Bind the Publish Task
     :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
@@ -320,15 +326,15 @@ def publish(item_ids,
     :type prov_info: dict
     :type license_id: str
     """
-    res = publish_tale(item_ids,
-                       tale,
-                       dataone_node,
-                       dataone_auth_token,
-                       girder_token,
-                       userId,
-                       prov_info,
-                       license_id)
-    return res
+    publish_tale(self.job_manager,
+                 item_ids,
+                 tale,
+                 dataone_node,
+                 dataone_auth_token,
+                 girder_token,
+                 userId,
+                 prov_info,
+                 license_id)
 
 
 @girder_job(title='Import Tale')
