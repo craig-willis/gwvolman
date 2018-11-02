@@ -18,13 +18,37 @@ from .utils import \
 
 from d1_common.types import dataoneTypes
 from d1_common import const as d1_const
-from d1_common.resource_map import createSimpleResourceMap
-
+from d1_common.resource_map import \
+    ResourceMap
 
 """
 Methods that are responsible for handling metadata generation and parsing
 belong here.
 """
+
+
+def createSimpleResourceMapCustom(ore_pid, scimeta_pid, sciobj_pid_list):
+    """
+    Create a simple resource map with one science metadata document and any
+    number of science data objects.
+    This method differs from d1_common.resource_map.createSimpleResourceMap
+    by allowing you to specify the coordinating node that the objects
+    can be found on.
+    :param ore_pid: The PID of the ORE document
+    :param scimeta_pid: PID of the metadata document
+    :param sciobj_pid_list: PID of the upload object
+    :type ore_pid: str
+    :type scimeta_pid: str
+    :type sciobj_pid_list: list
+    :return: The ORE object
+    :rtype: d1_common.resource_map.ResourceMap
+    """
+
+    ore = ResourceMap(base_url='https://cn-stage-2.test.dataone.org/cn')
+    ore.oreInitialize(ore_pid)
+    ore.addMetadataDocument(scimeta_pid)
+    ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
+    return ore
 
 
 def create_resource_map(resmap_pid, eml_pid, file_pids):
@@ -41,7 +65,7 @@ def create_resource_map(resmap_pid, eml_pid, file_pids):
     :rtype: bytes
     """
 
-    res_map = createSimpleResourceMap(resmap_pid, eml_pid, file_pids)
+    res_map = createSimpleResourceMapCustom(resmap_pid, eml_pid, file_pids)
     # createSimpleResourceMap returns type d1_common.resource_map.ResourceMap
     return res_map.serialize()
 
@@ -209,13 +233,13 @@ def create_minimum_eml(tale,
     If we aren't throw an exception and let the user know. We'll also check that
     the user has a userID from their JWT.
     """
-    last_name = user.get('lastName', None)
-    first_name = user.get('firstName', None)
-    email = user.get('email', None)
+    last_name = user.get('lastName')
+    first_name = user.get('firstName')
+    email = user.get('email')
 
     if any((None for x in [last_name, first_name, email])):
-        return 'Unable to find your name or email address. Please ensure ' \
-               'you have authenticated with DataONE.'
+        raise ValueError('Unable to find your name or email address. '
+                         'Please ensure you have authenticated with DataONE.')
 
     logging.debug('Creating EML Record')
     # Create the namespace
@@ -395,27 +419,35 @@ def populate_sys_meta(pid, format_id, size, md5, name, rights_holder):
     sys_meta.identifier = pid
     sys_meta.formatId = format_id
     sys_meta.size = size
+    sys_meta.submitter = rights_holder
     sys_meta.rightsHolder = rights_holder
     sys_meta.checksum = dataoneTypes.checksum(str(md5))
     sys_meta.checksum.algorithm = 'MD5'
-    sys_meta.accessPolicy = generate_public_access_policy()
+    sys_meta.accessPolicy = generate_access_policy()
     sys_meta.fileName = name
     return sys_meta
 
 
-def generate_public_access_policy():
+def generate_access_policy():
     """
     Creates the access policy for the system metadata.
-     Note that the permission is set to 'read'.
-
     :return: The access policy
     :rtype: d1_common.types.generated.dataoneTypes_v1.AccessPolicy
     """
-
+    read_permission = dataoneTypes.Permission('read')
+    write_permission = dataoneTypes.Permission('write')
     access_policy = dataoneTypes.accessPolicy()
-    access_rule = dataoneTypes.AccessRule()
-    access_rule.subject.append(d1_const.SUBJECT_PUBLIC)
-    permission = dataoneTypes.Permission('read')
-    access_rule.permission.append(permission)
-    access_policy.append(access_rule)
+
+    public_access_rule = dataoneTypes.AccessRule()
+    public_access_rule.subject.append(d1_const.SUBJECT_PUBLIC)
+    permission = dataoneTypes.Permission(read_permission)
+    public_access_rule.permission.append(permission)
+    access_policy.append(public_access_rule)
+
+    admin_access_rule = dataoneTypes.AccessRule()
+    admin_access_rule.subject.append("CN=knb-data-admins,DC=dataone,DC=org")
+    admin_access_rule.permission.append(write_permission)
+    admin_access_rule.permission.append(permission)
+    access_policy.append(admin_access_rule)
+
     return access_policy
