@@ -8,7 +8,6 @@ try:
 except ImportError:
     from urllib2 import urlopen
 from shutil import copyfileobj
-import uuid
 import yaml as yaml
 import os
 import girder_client
@@ -24,7 +23,8 @@ from .utils import \
     filter_items, \
     get_dataone_package_url, \
     extract_user_name, \
-    get_resource_map_user
+    get_resource_map_user, \
+    generate_dataone_guid
 
 from .dataone_metadata import \
     generate_system_metadata, \
@@ -71,7 +71,7 @@ def create_upload_eml(tale,
     """
 
     # Create the EML metadata
-    eml_pid = str(uuid.uuid4())
+    eml_pid = generate_dataone_guid()
     eml_doc = create_minimum_eml(tale,
                                  user,
                                  item_ids,
@@ -331,7 +331,7 @@ def create_upload_tale_yaml(tale,
     yaml_file = yaml.safe_dump(yaml_dict, default_flow_style=False)
 
     # Create a pid for the file
-    pid = str(uuid.uuid4())
+    pid = generate_dataone_guid()
 
     # Create system metadata for the file
     meta = generate_system_metadata(pid=pid,
@@ -377,7 +377,7 @@ def upload_license_file(client, license_id, rights_holder):
         raise ValueError('There was an error processing the license.')
 
     # Create a pid for the file
-    pid = str(uuid.uuid4())
+    pid = generate_dataone_guid()
     # Create system metadata for the file
     meta = generate_system_metadata(pid=pid,
                                     format_id='text/plain',
@@ -411,7 +411,7 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
     """
 
     # PID for the metadata object
-    pid = str(uuid.uuid4())
+    pid = generate_dataone_guid()
     with tempfile.NamedTemporaryFile() as temp_file:
         gc.downloadFile(str(file_object['_id']), temp_file)
         temp_file.seek(0)
@@ -461,7 +461,7 @@ def create_upload_repository(tale, client, rights_holder, gc):
                 raise ValueError('Error copying environment file to disk.')
 
             # Create a pid for the file
-            pid = str(uuid.uuid4())
+            pid = generate_dataone_guid()
             # Create system metadata for the file
             temp_file.seek(0)
             meta = generate_system_metadata(pid=pid,
@@ -509,7 +509,7 @@ def create_upload_remote_file(client, rights_holder, item_id, gc):
                     # We should stop if we can't upload the repository
                     raise ValueError('Error copying environment file to disk.')
             # Create a pid for the file
-                pid = str(uuid.uuid4())
+                pid = generate_dataone_guid()
             # Create system metadata for the file
                 temp_file.seek(0)
                 meta = generate_system_metadata(pid=pid,
@@ -736,7 +736,7 @@ def publish_tale(job_manager,
                               remote_file_pids +
                               [tale_yaml_pid, license_pid, repository_pid])
     upload_object_pids = list(filter(None, upload_object_pids))
-    resmap_pid = str(uuid.uuid4())
+    resmap_pid = generate_dataone_guid()
     logging.debug('Creating DataONE resource map')
     current_progress += 10
     job_manager.updateProgress(message='Uploading metadata records.',

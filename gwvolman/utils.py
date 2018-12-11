@@ -641,3 +641,13 @@ def filter_items(item_ids, gc):
             'remote': remote_objects,
             'local_files': local_objects,
             'local_items': local_items}
+
+
+def generate_dataone_guid():
+    """
+    DataONE requires that UUIDs are prepended with `urn:uuid:`. This method
+    returns a DataONE compliant guid.
+    :return: A DataONE compliant guid
+    :rtype: str
+    """
+    return 'urn:uuid:'+str(uuid.uuid4())
