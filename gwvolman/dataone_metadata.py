@@ -13,7 +13,8 @@ from .utils import \
     check_pid, \
     get_directory, \
     get_file_item, \
-    compute_md5
+    compute_md5, \
+    DATAONE_URL
 
 
 from d1_common.types import dataoneTypes
@@ -44,7 +45,7 @@ def createSimpleResourceMapCustom(ore_pid, scimeta_pid, sciobj_pid_list):
     :rtype: d1_common.resource_map.ResourceMap
     """
 
-    ore = ResourceMap(base_url='https://cn-stage-2.test.dataone.org/cn')
+    ore = ResourceMap(base_url=DATAONE_URL+'/cn')
     ore.oreInitialize(ore_pid)
     ore.addMetadataDocument(scimeta_pid)
     ore.addDataDocuments(sciobj_pid_list, scimeta_pid)

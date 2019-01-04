@@ -34,7 +34,8 @@ from .dataone_metadata import \
 
 from .constants import \
     ExtraFileNames, \
-    license_files
+    license_files, \
+    GIRDER_API_URL
 
 
 def create_upload_eml(tale,
@@ -573,7 +574,7 @@ def publish_tale(job_manager,
                                total=100,
                                current=current_progress)
     try:
-        gc = girder_client.GirderClient(apiUrl='https://girder.dev2.wholetale.org/api/v1')
+        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
         gc.token = str(girder_token)
     except Exception as e:
         logging.warning(e)

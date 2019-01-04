@@ -31,7 +31,7 @@ DOMAIN = os.environ.get('DOMAIN', 'dev.wholetale.org')
 TRAEFIK_ENTRYPOINT = os.environ.get("TRAEFIK_ENTRYPOINT", "http")
 REGISTRY_USER = os.environ.get('REGISTRY_USER', 'fido')
 REGISTRY_PASS = os.environ.get('REGISTRY_PASS')
-
+DATAONE_URL=os.environ.get('DATAONE_URL')
 MOUNTS = {}
 RETRIES = 5
 container_name_pattern = re.compile('tmp\.([^.]+)\.(.+)\Z')
