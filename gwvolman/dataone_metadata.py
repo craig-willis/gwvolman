@@ -241,7 +241,6 @@ def create_minimum_eml(tale,
         raise ValueError('Unable to find your name or email address. '
                          'Please ensure you have authenticated with DataONE.')
 
-    logging.debug('Creating EML Record')
     # Create the namespace
     ns = ET.Element('eml:eml')
     ns.set('xmlns:eml', "eml://ecoinformatics.org/eml-2.1.1")
@@ -295,7 +294,6 @@ def create_minimum_eml(tale,
                           file['mimeType'])
 
     # Add a section for the tale.yml file
-    logging.debug('Adding tale.yaml to EML')
     file_sizes.get('tale_yaml')
     description = file_descriptions[ExtraFileNames.tale_config]
     name = ExtraFileNames.tale_config
@@ -308,7 +306,6 @@ def create_minimum_eml(tale,
 
     # Add a section for the license file
     if file_sizes.get('license'):
-        logging.debug('Adding LICENSE to EML')
         description = file_descriptions[ExtraFileNames.license_filename]
         name = ExtraFileNames.license_filename
         object_format = 'text/plain'
@@ -320,7 +317,6 @@ def create_minimum_eml(tale,
 
     # Add a section for the repository file
     if file_sizes.get('repository'):
-        logging.debug('Adding repository.tar.gz to EML')
         description = file_descriptions[ExtraFileNames.environment_file]
         name = ExtraFileNames.environment_file
         object_format = 'application/tar+gzip'

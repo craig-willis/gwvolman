@@ -24,7 +24,8 @@ from .utils import \
     get_dataone_package_url, \
     extract_user_name, \
     get_resource_map_user, \
-    generate_dataone_guid
+    generate_dataone_guid, \
+    generate_size_progress_message
 
 from .dataone_metadata import \
     generate_system_metadata, \
@@ -427,7 +428,6 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
                     pid=pid,
                     file_object=temp_file.read(),
                     system_metadata=meta)
-        logging.debug('Uploaded file to DataONE, PID {}'.format(pid))
     return pid
 
 
@@ -435,6 +435,9 @@ def create_upload_repository(tale, client, rights_holder, gc):
     """
     Downloads the repository that's pointed to by the recipe and uploads it to the
     node that `client` points to.
+
+    DEVNOTE: This is going to be depreciated by repo2docker
+
     :param tale: The Tale that is being registered
     :param client: The interface to the member node
     :param rights_holder: The owner of this object
@@ -454,8 +457,6 @@ def create_upload_repository(tale, client, rights_holder, gc):
             try:
                 # Copy the response into the temporary file
                 copyfileobj(src, temp_file)
-                logging.debug('Copied file, size: {}'.format(temp_file.tell()))
-
             except IOError as e:
                 logging.warning(e)
                 raise ValueError('Error copying environment file to disk.')
@@ -470,7 +471,6 @@ def create_upload_repository(tale, client, rights_holder, gc):
                                             name=ExtraFileNames.environment_file,
                                             rights_holder=rights_holder)
             temp_file.seek(0)
-            logging.debug('Uploading repository to DataONE')
             upload_file(client=client,
                         pid=pid,
                         file_object=io.BytesIO(temp_file.read()),
@@ -480,7 +480,7 @@ def create_upload_repository(tale, client, rights_holder, gc):
         return pid, size
 
     except IOError as e:
-        logging.debug('Failed to process repository'.format(e))
+        logging.warning('Failed to process repository'.format(e))
     return None, 0
 
 
@@ -591,7 +591,6 @@ def publish_tale(job_manager,
          particular member node by specifying `repository`. The auth_token is the jwt token from
          DataONE. Close the connection between uploads otherwise some uploads will fail.
         """
-        logging.debug('Creating the DataONE client')
         client = create_dataone_client(dataone_node, {
             "headers": {
                 "Authorization": "Bearer " + dataone_auth_token,
@@ -637,7 +636,6 @@ def publish_tale(job_manager,
     local_file_pids = list()
     current_progress += 5
     for file in filtered_items['local_files']:
-        logging.debug('Processing local files for DataONE upload')
         local_file_pids.append(create_upload_object_metadata(client, file, user_id, gc))
         current_progress += file_progress_progression
         job_manager.updateProgress(message='Uploading {}   Size: {} MB'.format(
@@ -651,16 +649,15 @@ def publish_tale(job_manager,
     """
     remote_file_pids = list()
     for item_id in filtered_items['remote']:
-        logging.debug('Processing remote files for DataONE upload')
         file = get_file_item(item_id, gc)
         remote_file_pids.append(create_upload_remote_file(client,
                                                           user_id,
                                                           item_id,
                                                           gc))
         current_progress += file_progress_progression
-        job_manager.updateProgress(message='Uploading {}   Size: {} MB'.format(
+        job_manager.updateProgress(message=generate_size_progress_message(
             file['name'],
-            file['size']/1000000),
+            file['size']),
             total=100, current=current_progress)
 
     """
@@ -737,7 +734,6 @@ def publish_tale(job_manager,
                               [tale_yaml_pid, license_pid, repository_pid])
     upload_object_pids = list(filter(None, upload_object_pids))
     resmap_pid = generate_dataone_guid()
-    logging.debug('Creating DataONE resource map')
     current_progress += 10
     job_manager.updateProgress(message='Uploading metadata records.',
                                total=100,
@@ -750,7 +746,6 @@ def publish_tale(job_manager,
                          upload_object_pids,
                          client,
                          get_resource_map_user(user_id))
-    logging.debug('Finished creating DataONE resource map')
     package_url = get_dataone_package_url(dataone_node, eml_pid)
     current_progress = 100
     job_manager.updateProgress(message='Your Tale has successfully been published '

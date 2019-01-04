@@ -13,6 +13,7 @@ import uuid
 import logging
 import jwt
 import hashlib
+import math
 
 try:
     from urlparse import urlparse
@@ -651,3 +652,27 @@ def generate_dataone_guid():
     :rtype: str
     """
     return 'urn:uuid:'+str(uuid.uuid4())
+
+
+def generate_size_progress_message(name, size_bytes):
+    """
+    Generates a message for the user about which file is being uploaded to a
+    remote repository during publishing. For UX reasons, we convert Bytes
+    to an appropriate derivative type.
+    This was adapted from the following post at Stack Overflow
+    https://stackoverflow.com/questions/5194057/better-way-to-convert-file-sizes-in-python
+
+    :param name: Name of the file
+    :param size_bytes: Size of the file in Bytes
+    :return: The message that the user will see
+    :rtype: str
+    """
+
+    size_name = ("Bytes", "KB", "MB", "GB", "TB", "PB")
+    i = int(math.floor(math.log(size_bytes, 1024)))
+    p = math.pow(1024, i)
+    s = round(size_bytes / p, 2)
+    progress_message = "Uploading {}  Size: {} {}".format(name,
+                                                          s,
+                                                          size_name[i])
+    return progress_message
