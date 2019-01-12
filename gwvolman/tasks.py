@@ -265,14 +265,26 @@ def build_tale_image(tale_id, girder_token):
 
     logging.info('Building image for Tale %s', tale_id)
 
-    # Download the workspace folder to the temp directory
-    temp_dir = tempfile.mkdtemp(dir='/host/tmp')
+    # Mount the workspace folder to the temp directory
+    temp_dir = tempfile.mkdtemp(dir='/tmp')
+    _safe_mkdir(HOSTDIR + temp_dir)
+
     try:
-        logging.info('Downloading workspace folder to %s (%s)', temp_dir, tale_id)
+        logging.info('Mount workspace folder to %s (%s)', temp_dir, tale_id)
+
         gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
-        gc.token = str(girder_token)
-        tale = gc.get('/tale/{}'.format(tale_id))
-        gc.downloadFolderRecursive(tale['folderId'], temp_dir)
+
+        #gc.token = str(girder_token)
+        #tale = gc.get('/tale/{}'.format(tale_id))
+        #gc.downloadFolderRecursive(tale['folderId'], temp_dir)
+
+        api_key = _get_api_key(gc)
+        cmd = 'girderfs -c wt_work --api-url '
+        cmd += '{} --api-key {} {} {}'.format(
+            GIRDER_API_URL, api_key, temp_dir, tale['_id'])
+        logging.info("Calling: %s", cmd)
+        subprocess.call(cmd, shell=True)
+
     except Exception as e:
         raise ValueError('Error authenticating with Girder {}'.format(e))
     except KeyError:
@@ -296,7 +308,7 @@ def build_tale_image(tale_id, girder_token):
 
     # Run repo2docker on the workspace using a shared tmp directory
     logging.info('Building image (%s)', tale_id)
-    r2d_cmd='jupyter-repo2docker --image-name {} --no-run --user-id=1000 --user-name=jovyan {}'.format(tag, temp_dir)
+    r2d_cmd='jupyter-repo2docker --image-name {} --no-run --user-id=1000 --user-name=jovyan /host{}'.format(tag, temp_dir)
     container = cli.containers.run(
         image='jupyter/repo2docker:0.7.0', 
         command=r2d_cmd, 
@@ -317,7 +329,9 @@ def build_tale_image(tale_id, girder_token):
     for line in apicli.push(tag, stream=True):
         print(line)
 
+    subprocess.call('umount {}'.format(temp_dir), shell=True)
     #shutil.rmtree(temp_dir, ignore_errors=True)
+    os.rmdir(temp_dir)
 
     # Get the image attributes
     image = cli.images.get(tag)
