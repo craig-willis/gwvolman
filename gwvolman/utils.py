@@ -198,7 +198,7 @@ def _get_container_config(gc, tale):
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
             environment=get_env_with_csp(tale_config),
-            image=urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale['imageId'],
+            image=tale['imageInfo']['digest'],
             mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')

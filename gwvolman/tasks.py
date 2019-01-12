@@ -258,36 +258,72 @@ def remove_volume(self, instanceId):
         pass
 
 
-@girder_job(title='Build WT Image')
+@girder_job(title='Build Tale Image')
 @app.task
-def build_image(image_id, repo_url, commit_id):
-    """Build docker image from WT Image object and push to a registry."""
-    temp_dir = tempfile.mkdtemp()
-    # Clone repository and set HEAD to chosen commitId
-    cmd = 'git clone --recursive {} {}'.format(repo_url, temp_dir)
-    subprocess.call(cmd, shell=True)
-    subprocess.call('git checkout ' + commit_id, shell=True, cwd=temp_dir)
+def build_tale_image(tale_id, girder_token):
+    """Build docker image from Tale object and push to a registry."""
+
+    logging.info('Building image for Tale %s', tale_id)
+
+    # Download the workspace folder to the temp directory
+    temp_dir = tempfile.mkdtemp(dir='/host/tmp')
+    try:
+        logging.info('Downloading workspace folder to %s (%s)', temp_dir, tale_id)
+        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
+        gc.token = str(girder_token)
+        tale = gc.get('/tale/{}'.format(tale_id))
+        gc.downloadFolderRecursive(tale['folderId'], temp_dir)
+    except Exception as e:
+        raise ValueError('Error authenticating with Girder {}'.format(e))
+    except KeyError:
+        logger.info('KeyError')
+        pass  # no workspace folderId
+    except girder_client.HttpError:
+        logging.warn("Workspace folder not found for tale: %s",
+                     str(tale['_id']))
+        pass
+
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
                  registry=DEPLOYMENT.registry_url)
-    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + image_id
-    for line in apicli.build(path=temp_dir, pull=True, tag=tag):
-        print(line)
-
-    # TODO: create tarball
-    # remove clone
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    for line in apicli.push(tag, stream=True):
-        print(line)
 
     cli = docker.from_env(version='1.28')
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
+
+    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale_id
+
+    # Run repo2docker on the workspace using a shared tmp directory
+    logging.info('Building image (%s)', tale_id)
+    r2d_cmd='jupyter-repo2docker --image-name {} --no-run --user-id=1000 --user-name=jovyan {}'.format(tag, temp_dir)
+    container = cli.containers.run(
+        image='jupyter/repo2docker:0.7.0', 
+        command=r2d_cmd, 
+        environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
+        privileged=True,
+        detach=True,
+        remove=True,
+        volumes= { 
+            '/var/run/docker.sock': {'bind': '/var/run/docker.sock', 'mode': 'rw'},
+            '/tmp': {'bind': '/host/tmp', 'mode': 'ro'}
+        }
+    )
+
+    for line in container.logs(stream=True):
+        logging.info(line.decode('utf-8'))
+    
+    # Push the image
+    for line in apicli.push(tag, stream=True):
+        print(line)
+
+    #shutil.rmtree(temp_dir, ignore_errors=True)
+
+    # Get the image attributes
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
-    return {'image_digest': digest}
+    return digest
 
 
 @girder_job(title='Publish Tale')
