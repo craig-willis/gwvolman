@@ -259,34 +259,33 @@ def remove_volume(self, instanceId):
 
 
 @girder_job(title='Build Tale Image')
-@app.task
-def build_tale_image(tale_id, girder_token):
+@app.task(bind=True)
+def build_tale_image(self, tale_id):
     """Build docker image from Tale object and push to a registry."""
 
     logging.info('Building image for Tale %s', tale_id)
 
-    # Mount the workspace folder to the temp directory
-    temp_dir = tempfile.mkdtemp(dir='/tmp')
-    _safe_mkdir(HOSTDIR + temp_dir)
+    temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
 
     try:
         logging.info('Mount workspace folder to %s (%s)', temp_dir, tale_id)
 
-        gc = girder_client.GirderClient(apiUrl=GIRDER_API_URL)
+        user = self.girder_client.get('/user/me')
+        logging.debug('Workspace user %s', user)
 
-        #gc.token = str(girder_token)
-        #tale = gc.get('/tale/{}'.format(tale_id))
-        #gc.downloadFolderRecursive(tale['folderId'], temp_dir)
-
-        api_key = _get_api_key(gc)
-        cmd = 'girderfs -c wt_work --api-url '
-        cmd += '{} --api-key {} {} {}'.format(
-            GIRDER_API_URL, api_key, temp_dir, tale['_id'])
-        logging.info("Calling: %s", cmd)
-        subprocess.call(cmd, shell=True)
+        path = '/collection/WholeTale Workspaces/WholeTale Workspaces'
+        parent = self.girder_client.get('resource/lookup', parameters={'path': path})
+        logging.debug('Workspace parent %s', parent)
+        workspace = self.girder_client.get(
+            '/folder',
+            parameters={'parentId': parent['_id'], 'parentType': 'folder', 'name': tale_id},
+        )
+        logging.debug('Workspace %s', workspace[0])
+        self.girder_client.downloadFolderRecursive(
+            workspace[0]['_id'], temp_dir)
 
     except Exception as e:
-        raise ValueError('Error authenticating with Girder {}'.format(e))
+        raise ValueError('Error accessing Girder: {}'.format(e))
     except KeyError:
         logger.info('KeyError')
         pass  # no workspace folderId
@@ -307,10 +306,12 @@ def build_tale_image(tale_id, girder_token):
     tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale_id
 
     # Run repo2docker on the workspace using a shared tmp directory
-    logging.info('Building image (%s)', tale_id)
-    r2d_cmd='jupyter-repo2docker --image-name {} --no-run --user-id=1000 --user-name=jovyan /host{}'.format(tag, temp_dir)
+    r2d_cmd='jupyter-repo2docker --target-repo-dir="/home/jovyan/work/workspace" --no-clean --image-name {} --no-run --user-id=1000 --user-name=jovyan {}'.format(tag, temp_dir)
+    logging.info('Building image (%s): %s', tale_id, r2d_cmd)
+    # TODO: need to configure version of repo2docker
+    # TODO: Reach Image configuration information
     container = cli.containers.run(
-        image='jupyter/repo2docker:0.7.0', 
+        image='jupyter/repo2docker:master', 
         command=r2d_cmd, 
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
         privileged=True,
@@ -329,14 +330,13 @@ def build_tale_image(tale_id, girder_token):
     for line in apicli.push(tag, stream=True):
         print(line)
 
-    subprocess.call('umount {}'.format(temp_dir), shell=True)
-    #shutil.rmtree(temp_dir, ignore_errors=True)
-    os.rmdir(temp_dir)
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get the image attributes
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
+    logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
     return digest
 
 
