@@ -144,6 +144,23 @@ def launch_container(self, payload):
         self.girder_client, payload['instanceId'])
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
+    if 'imageInfo' not in tale:
+
+        # Wait for image to be built
+        tic = time.time()
+        timeout = 180.0
+
+        while time.time() - tic < timeout:
+
+            logging.info("Waiting for image build to complete.")
+
+            tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
+
+            if 'imageInfo' in tale and 'digest' in tale['imageInfo']:
+                break
+
+            time.sleep(5)
+
     # _pull_image() #FIXME
     container_config = _get_container_config(self.girder_client, tale)
     service, attrs = _launch_container(
@@ -303,7 +320,7 @@ def build_tale_image(self, tale_id):
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
 
-    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale_id
+    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale_id + "-" + str(int(time.time()))
 
     # Run repo2docker on the workspace using a shared tmp directory
     r2d_cmd='jupyter-repo2docker --target-repo-dir="/home/jovyan/work/workspace" --no-clean --image-name {} --no-run --user-id=1000 --user-name=jovyan {}'.format(tag, temp_dir)
@@ -330,7 +347,7 @@ def build_tale_image(self, tale_id):
     for line in apicli.push(tag, stream=True):
         print(line)
 
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    #shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get the image attributes
     image = cli.images.get(tag)
