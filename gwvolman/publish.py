@@ -467,7 +467,7 @@ def create_upload_repository(tale, client, rights_holder, gc):
             # Create system metadata for the file
             temp_file.seek(0)
             meta = generate_system_metadata(pid=pid,
-                                            format_id='application/tar+gzip',
+                                            format_id='application/x-gzip',
                                             file_object=temp_file.read(),
                                             name=ExtraFileNames.environment_file,
                                             rights_holder=rights_holder)
