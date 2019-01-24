@@ -278,39 +278,46 @@ def remove_volume(self, instanceId):
 @girder_job(title='Build Tale Image')
 @app.task(bind=True)
 def build_tale_image(self, tale_id):
-    """Build docker image from Tale object and push to a registry."""
-
+    """
+    Build docker image from Tale workspace using repo2docker
+    and push to Whole Tale registry.
+    """
     logging.info('Building image for Tale %s', tale_id)
 
     temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
 
     try:
-        logging.info('Mount workspace folder to %s (%s)', temp_dir, tale_id)
+        logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
 
         user = self.girder_client.get('/user/me')
         logging.debug('Workspace user %s', user)
 
         path = '/collection/WholeTale Workspaces/WholeTale Workspaces'
-        parent = self.girder_client.get('resource/lookup', parameters={'path': path})
+        parent = self.girder_client.get('resource/lookup',
+                                        parameters={'path': path})
         logging.debug('Workspace parent %s', parent)
+
         workspace = self.girder_client.get(
             '/folder',
-            parameters={'parentId': parent['_id'], 'parentType': 'folder', 'name': tale_id},
+            parameters={
+                'parentId': parent['_id'],
+                'parentType': 'folder',
+                'name': tale_id
+            },
         )
-        logging.debug('Workspace %s', workspace[0])
+        logging.debug('Workspace folder %s', workspace[0])
+
         self.girder_client.downloadFolderRecursive(
             workspace[0]['_id'], temp_dir)
 
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
     except KeyError:
-        logger.info('KeyError')
+        logging.info('KeyError')
         pass  # no workspace folderId
     except girder_client.HttpError:
-        logging.warn("Workspace folder not found for tale: %s",
-                     str(tale['_id']))
+        logging.warn("Workspace folder not found for tale: %s", tale_id)
         pass
-
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
@@ -320,40 +327,59 @@ def build_tale_image(self, tale_id):
     cli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
               registry=DEPLOYMENT.registry_url)
 
-    tag = urlparse(DEPLOYMENT.registry_url).netloc + '/' + tale_id + "-" + str(int(time.time()))
+    # TODO: need either a --force-rebuild flag on repo2docker or some way
+    # to determine that the workspace contents have changed similar to 
+    # the Git commit ID.
+    tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
+                            tale_id, str(int(time.time())))
 
-    # Run repo2docker on the workspace using a shared tmp directory
-    r2d_cmd='jupyter-repo2docker --target-repo-dir="/home/jovyan/work/workspace" --no-clean --image-name {} --no-run --user-id=1000 --user-name=jovyan {}'.format(tag, temp_dir)
-    logging.info('Building image (%s): %s', tale_id, r2d_cmd)
+    # Run repo2docker on the workspace using a shared temp directory. Note that
+    # this uses the "local" provider.  Use the same default user-id and 
+    # user-name as BinderHub
+    r2d_cmd = ('jupyter-repo2docker '
+               '--target-repo-dir="/home/jovyan/work/workspace" '
+               '--user-id=1000 --user-name=jovyan '
+               '--no-clean --no-run '
+               '--image-name {} {}'.format(tag, temp_dir))
+
+    logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
+
     # TODO: need to configure version of repo2docker
-    # TODO: Reach Image configuration information
+    # TODO: When repo2docker#545 and #546 are implemented, read the Image
+    #       object to set the port and default command
     container = cli.containers.run(
-        image='jupyter/repo2docker:master', 
-        command=r2d_cmd, 
+        image='jupyter/repo2docker:master',
+        command=r2d_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
         privileged=True,
         detach=True,
         remove=True,
-        volumes= { 
-            '/var/run/docker.sock': {'bind': '/var/run/docker.sock', 'mode': 'rw'},
-            '/tmp': {'bind': '/host/tmp', 'mode': 'ro'}
+        volumes={
+            '/var/run/docker.sock': {
+                'bind': '/var/run/docker.sock', 'mode': 'rw'
+            },
+            '/tmp': {
+                'bind': '/host/tmp', 'mode': 'ro'
+            }
         }
     )
 
     for line in container.logs(stream=True):
         logging.info(line.decode('utf-8'))
-    
+
     # Push the image
     for line in apicli.push(tag, stream=True):
-        print(line)
+        logging.info(line.decode('utf-8'))
 
-    #shutil.rmtree(temp_dir, ignore_errors=True)
+    # Remove the temporary directory
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get the image attributes
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
+    # Image digest used by updateBuildStatus handler
     return digest
 
 
