@@ -300,17 +300,17 @@ def get_file_item(item_id, gc):
         return None
 
 
-def is_dataone_url(url):
+def from_dataone(gc, item_id):
     """
     Checks if a url has dataone in it
     :param url: The url in question
     :return: True if it does, False otherwise
     """
-
-    res = url.find('dataone.org')
-    if res is not -1:
-        return True
-    else:
+    item = gc.getItem(item_id)
+    folder = gc.getFolder(item['folderId'])
+    try:
+        return folder['meta']['provider'] == 'DataONE'
+    except KeyError:
         return False
 
 
@@ -620,7 +620,7 @@ def filter_items(item_ids, gc):
         # Check if it points do a dataone objbect
         url = get_remote_url(item_id, gc)
         if url:
-            if is_dataone_url(url) or is_dev_url(url):
+            if from_dataone(gc, item_id):
                 dataone_objects.append(item_id)
                 dataone_pids.append(get_item_identifier(item_id, gc))
                 continue
