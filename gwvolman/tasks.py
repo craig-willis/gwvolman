@@ -275,7 +275,6 @@ def build_image(image_id, repo_url, commit_id):
     for line in apicli.build(path=temp_dir, pull=True, tag=tag):
         print(line)
 
-    # TODO: create tarball
     # remove clone
     shutil.rmtree(temp_dir, ignore_errors=True)
     for line in apicli.push(tag, stream=True):
@@ -302,13 +301,6 @@ def publish(self,
             prov_info,
             license_id):
     """
-<<<<<<< HEAD
-    Publish a Tale to DataONE.
-
-=======
-    Publishes a Tale to DataONE
-    :param self: self
->>>>>>> 0870cba... Bind the Publish Task
     :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint

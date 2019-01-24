@@ -314,60 +314,6 @@ def from_dataone(gc, item_id):
         return False
 
 
-def is_dev_url(url):
-    """
-    Determines whether the object at the URL is on the NCEAS
-    Development network
-    :param url: URL to the object
-    :type url: str
-    :return: True of False, depending on whether it's on the dev network
-    :rtype: bool
-    """
-    parsed_url = urlparse(url).netloc
-    parsed_dev_cn = urlparse(DataONELocations.dev_cn_v2).netloc
-    parsed_dev_mn = urlparse(DataONELocations.dev_mn).netloc
-    if parsed_url == parsed_dev_cn:
-        return True
-    if parsed_url == parsed_dev_mn:
-        return True
-    return False
-
-
-def is_in_network(url, network):
-    """
-    Checks to see if the url shares the same netlocation as network
-    :param url: The URL to a data object
-    :param network: The url of the member node being checke
-    :return: True or False
-    """
-    parsed_url = urlparse(url).netloc
-    parsed_network = urlparse(network).netloc
-    base_dev_mn = urlparse(DataONELocations.dev_mn).netloc
-    base_dev_cn = urlparse(DataONELocations.dev_cn_v2).netloc
-
-    if parsed_network == base_dev_mn:
-        # Then we're in NCEAS Development
-        # The resolve address is through the membernode in this case
-        if parsed_url == base_dev_cn:
-            # Then the object is in network
-            return True
-        else:
-            # Then the object is outside network
-            return False
-
-    else:
-        # Otherwise we're on DataONE
-
-        base_dev_cn = urlparse(DataONELocations.prod_cn).netloc
-
-        if parsed_url == base_dev_cn:
-            # Then the object is in network
-            return True
-        else:
-            # Then the object is outside network
-            return False
-
-
 def check_pid(pid):
     """
     Check that a pid is of type str. Pids are generated as uuid4, and this
@@ -408,18 +354,18 @@ def get_remote_url(item_id, gc):
         return url
 
 
-def get_dataone_package_url(repository, pid):
+def get_dataone_package_url(member_node, pid):
     """
     Given a repository url and a pid, construct a url that should
      be the package's landing page.
 
-    :param repository: The repository that the package is on
+    :param member_node: The member node that the package is on
     :param pid: The package pid
     :return: The package landing page
     """
-    if repository in DataONELocations.prod_cn:
+    if member_node in DataONELocations.prod_cn:
         return str('https://search.dataone.org/view/'+pid)
-    elif repository in DataONELocations.dev_mn:
+    elif member_node in DataONELocations.dev_mn:
         return str('https://dev.nceas.ucsb.edu/view/'+pid)
 
 
