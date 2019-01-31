@@ -31,13 +31,9 @@ class DataONELocations:
     endpoints.
     """
     # Production coordinating node
-    prod_cn = 'https://cn.dataone.org/cn/v2'
+    prod_mn = 'https://knb.ecoinformatics.org/knb/d1/mn'
     # Development member node
-    dev_mn = 'https://search-dev.test.dataone.org/cn/v2'
-    # Development coordinating node
-    dev_cn = 'https://cn-stage-2.test.dataone.org/cn/v2'
-
-
+    dev_mn = 'https://dev.nceas.ucsb.edu/knb/d1/mn'
 class ExtraFileNames:
     """
     When creating data packages we'll have to create additional files, such as

@@ -363,7 +363,7 @@ def get_dataone_package_url(member_node, pid):
     :param pid: The package pid
     :return: The package landing page
     """
-    if member_node in DataONELocations.prod_cn:
+    if member_node in DataONELocations.prod_mn:
         return str('https://search.dataone.org/view/'+pid)
     elif member_node in DataONELocations.dev_mn:
         return str('https://dev.nceas.ucsb.edu/view/'+pid)
