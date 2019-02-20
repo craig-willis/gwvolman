@@ -517,13 +517,13 @@ def publish_tale(job_manager,
     job_manager.updateProgress(message='Generating tale metadata',
                                total=100,
                                current=current_progress)
-    tale_yaml_pid, tale_yaml_length = upload_manifest(tale,
-                                                      item_ids,
-                                                      client,
-                                                      prov_info,
-                                                      user_id,
-                                                      full_orcid_name,
-                                                      gc)
+    tale_manifest_pid, tale_manifest_length = upload_manifest(tale,
+                                                              item_ids,
+                                                              client,
+                                                              prov_info,
+                                                              user_id,
+                                                              full_orcid_name,
+                                                              gc)
 
     """
     Upload the license file. Save the size for the EML record, and the pid for
@@ -546,7 +546,7 @@ def publish_tale(job_manager,
     repository_pid, repository_size = create_upload_repository(tale, client, user_id, gc)
 
     # Create a dictionary that holds the miscellaneous files' sizes for the EML document
-    file_sizes = {'tale_yaml': tale_yaml_length,
+    file_sizes = {'tale_manifest': tale_manifest_length,
                   'license': license_size,
                   'repository': repository_size}
 
@@ -581,7 +581,7 @@ def publish_tale(job_manager,
     upload_object_pids = list(local_file_pids +
                               filtered_items['dataone_pids'] +
                               remote_file_pids +
-                              [tale_yaml_pid, license_pid, repository_pid])
+                              [tale_manifest_pid, license_pid, repository_pid])
     upload_object_pids = list(filter(None, upload_object_pids))
     resmap_pid = generate_dataone_guid()
     current_progress += 10

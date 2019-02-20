@@ -24,7 +24,8 @@ from d1_common.resource_map import \
 
 """
 Methods that are responsible for handling metadata generation and parsing
-belong here.
+belong here. Many of these methods are helper functions for generating the
+EML document.
 """
 
 
@@ -295,14 +296,14 @@ def create_minimum_eml(tale,
                           file['mimeType'])
 
     # Add a section for the tale.yml file
-    file_sizes.get('tale_yaml')
+    file_sizes.get('tale_manifest')
     description = file_descriptions[ExtraFileNames.tale_config]
     name = ExtraFileNames.tale_config
-    object_format = 'application/x-yaml'
+    object_format = 'application/json'
     add_object_record(dataset,
                       name,
                       description,
-                      file_sizes.get('tale_yaml'),
+                      file_sizes.get('tale_manifest'),
                       object_format)
 
     # Add a section for the license file
