@@ -2,13 +2,13 @@ import io
 import tempfile
 import logging
 import json
+from sys import getsizeof
 
 try:
     from urllib.request import urlopen
 except ImportError:
     from urllib2 import urlopen
 from shutil import copyfileobj
-import yaml as yaml
 import os
 import girder_client
 
@@ -134,113 +134,6 @@ def upload_file(client, pid, file_object, system_metadata):
         return 'Error uploading file to DataONE. {0}'.format(str(e))
 
 
-def create_paths_structure(item_ids, gc):
-    """
-    Creates a file that lists the path that each item is located at.
-    :param item_ids: A list of items that are in the tale
-    :param gc: The girder client
-    :type item_ids: list
-    :return: The dict representing the file structure
-    :rtype: dict
-    """
-
-    """
-    We'll use a dict structure to hold the file contents during creation for
-     convenience.
-    """
-    path_info = dict()
-
-    for item_id in item_ids:
-        item = gc.getItem(item_id)
-        path = gc.get('resource/{}/path?type=item'.format(item_id))
-        path_info[item['name']] = []
-        path_info[item['name']] = {'path': path}
-
-        # Check if the object is pointing to an external source
-        file = get_file_item(item_id, gc)
-        if file is not None:
-            link_url = file.get('linkUrl', None)
-            if link_url is not None:
-                path_info[item['name']] = {'path': path,
-                                           'uri': link_url}
-
-    return {'paths': path_info}
-
-
-def create_metadata_info_structure(tale,
-                                   entrypoint,
-                                   full_orcid_name,
-                                   orcid_id):
-    """
-    Any miscellaneous information about the tale can be added here.
-    :param tale: The tale that is being published
-    :param entrypoint: A dictionary that holds the entrypoint
-    :param full_orcid_name: The user's full name from their ORCID
-    :param orcid_id: The user's ORCID url
-    :type tale: wholetale.models.Tale
-    :type entrypoint: dict
-    :type full_orcid_name: str
-    :type orcid_id: str
-    :return: A dictionary of tale information
-    :rtype: dict
-    """
-    # We'll store the information as a dictionary
-    metadata_info = dict()
-
-    tale_authors = {
-        'name': full_orcid_name,
-        'orcid': orcid_id}
-    metadata_info['authors'] = tale_authors
-    metadata_info['category'] = tale.get('category', 'None')
-    metadata_info['description'] = tale.get('description', 'None')
-    metadata_info['illustration'] = tale.get('illustration', 'None')
-    metadata_info['name'] = tale.get('title', 'None')
-    if entrypoint:
-        metadata_info['entrypoint'] = entrypoint.get('entryPoint', 'None')
-
-    # Some early version tales are missing formats, so check if it has one
-    tale_format = tale.get('format')
-    if tale_format:
-        metadata_info.update({'format': tale['format']})
-    metadata_info['public'] = tale.get('public')
-
-    return {'metadata': metadata_info}
-
-
-def create_environment_structure(tale, gc):
-    """
-    Create the `environment` section of the tale yaml
-    :param tale: The Tale that is being serialized
-    :param gc: The Girder Client
-    :return: The portion of the tale yaml describing the environment
-    :rtype: dict
-    """
-    image = gc.get('/image/{}'.format(tale['imageId']))
-    recipe = gc.get('/recipe/{}'.format(image['recipeId']))
-    environment = dict()
-    environment['url'] = recipe['url']
-    environment['name'] = recipe['name']
-    environment['commitId'] = recipe['commitId']
-    environment['icon'] = image['icon']
-    environment['config'] = image['config']
-    environment['archive'] = ExtraFileNames.environment_file
-
-    return {'environment': environment}
-
-
-def create_outer_structure(tale):
-    """
-    Creates the outermost level of the tale yaml file
-    :param tale: The Tale that is being serialized
-    :type tale: dict
-    :return: The free floating records
-    :rtype: dict
-    """
-    outer_info = dict()
-    outer_info.update({'identifier': tale.get('doi', tale.get('_id'))})
-    return outer_info
-
-
 def create_upload_resmap(res_pid,
                          eml_pid,
                          obj_pids,
@@ -283,74 +176,6 @@ def create_upload_resmap(res_pid,
                 system_metadata=meta)
 
 
-def create_upload_tale_yaml(tale,
-                            item_ids,
-                            client,
-                            prov_info,
-                            rights_holder,
-                            full_orcid_name,
-                            gc):
-    """
-    The yaml content is represented with Python dicts, and then dumped to
-     the yaml object.
-    :param tale: The tale that is being published
-    :param item_ids: A list of all of the ids of the files that are being uploaded
-    :param client: The client that interfaces DataONE
-    :param prov_info: A dictionary of additional parameters for the file. This information
-    is gathered in the UI and passed through the REST endpoint.
-    :param rights_holder: The owner of this object
-    :param full_orcid_name: The user's name from their ORCID
-    :param gc: The girder client
-    :type tale: wholetale.models.Tale
-    :type item_ids: list
-    :type client: MemberNodeClient_2_0
-    :type prov_info: dict
-    :type rights_holder: str
-    :type full_orcid_name: str
-    :return: The pid and the size of the file
-    :rtype: tuple
-    """
-
-    # Create the dict that has general information about the package
-    tale_metadata_info = create_metadata_info_structure(tale,
-                                                        prov_info,
-                                                        full_orcid_name,
-                                                        rights_holder)
-
-    # Create the dict that holds the file paths
-    file_paths_info = create_paths_structure(item_ids, gc)
-    # Create the dict holding the environment section
-    environment_info = create_environment_structure(tale, gc)
-    outer_info = create_outer_structure(tale)
-    # Append all of the information together
-    yaml_dict = dict()
-    yaml_dict.update(tale_metadata_info)
-    yaml_dict.update(file_paths_info)
-    yaml_dict.update(environment_info)
-    yaml_dict.update(outer_info)
-
-    # Transform the file into yaml from the dict structure
-    yaml_file = yaml.safe_dump(yaml_dict, default_flow_style=False)
-
-    # Create a pid for the file
-    pid = generate_dataone_guid()
-
-    # Create system metadata for the file
-    meta = generate_system_metadata(pid=pid,
-                                    format_id='text/plain',
-                                    file_object=yaml_file,
-                                    name=ExtraFileNames.tale_config,
-                                    rights_holder=rights_holder)
-    # Upload the file
-    upload_file(client=client,
-                pid=pid,
-                file_object=io.StringIO(yaml_file),
-                system_metadata=meta)
-
-    # Return the pid
-    return pid, len(yaml_file)
-
-
 def upload_license_file(client, license_id, rights_holder):
     """
     Upload a license file to DataONE.
@@ -391,6 +216,30 @@ def upload_license_file(client, license_id, rights_holder):
 
     # Return the pid and length of the file
     return pid, license_length
+
+
+def upload_manifest(tale_id, rights_holder, dataone_client, gc):
+    """
+
+    :return:
+    """
+    manifest = gc.get('/tale/manifest{}'.format(tale_id))
+    manifest_pid = generate_dataone_guid()
+    manifest_size = getsizeof(manifest)
+    meta = generate_system_metadata(manifest_pid,
+                                    format_id='application/json',
+                                    file_object=manifest,
+                                    name='manifest.json',
+                                    is_file=True,
+                                    rights_holder=rights_holder,
+                                    size=manifest_size)
+
+    upload_file(client=dataone_client,
+                pid=manifest_pid,
+                file_object=manifest,
+                system_metadata=meta)
+
+    return manifest_pid, manifest_size
 
 
 def create_upload_object_metadata(client, file_object, rights_holder, gc):
@@ -662,19 +511,19 @@ def publish_tale(job_manager,
             total=100, current=current_progress)
 
     """
-    Create the tale yaml file. Save the size so that is can be referenced in the EML.
+    Create the tale manifest file. Save the size so that is can be referenced in the EML.
     The pid is also saved so that we can put it in the resource map.
     """
     job_manager.updateProgress(message='Generating tale metadata',
                                total=100,
                                current=current_progress)
-    tale_yaml_pid, tale_yaml_length = create_upload_tale_yaml(tale,
-                                                              item_ids,
-                                                              client,
-                                                              prov_info,
-                                                              user_id,
-                                                              full_orcid_name,
-                                                              gc)
+    tale_yaml_pid, tale_yaml_length = upload_manifest(tale,
+                                                      item_ids,
+                                                      client,
+                                                      prov_info,
+                                                      user_id,
+                                                      full_orcid_name,
+                                                      gc)
 
     """
     Upload the license file. Save the size for the EML record, and the pid for
