@@ -223,7 +223,7 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
 
     :return:
     """
-    manifest = gc.get('/tale/manifest{}'.format(tale_id))
+    manifest = gc.get('/tale/{}/manifest'.format(tale_id))
     manifest_pid = generate_dataone_guid()
     manifest_size = getsizeof(manifest)
     meta = generate_system_metadata(manifest_pid,
