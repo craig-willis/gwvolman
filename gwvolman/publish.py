@@ -518,11 +518,8 @@ def publish_tale(job_manager,
                                total=100,
                                current=current_progress)
     tale_manifest_pid, tale_manifest_length = upload_manifest(tale,
-                                                              item_ids,
-                                                              client,
-                                                              prov_info,
                                                               user_id,
-                                                              full_orcid_name,
+                                                              client,
                                                               gc)
 
     """
