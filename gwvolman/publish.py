@@ -228,7 +228,7 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
     manifest_size = getsizeof(manifest)
     meta = generate_system_metadata(manifest_pid,
                                     format_id='application/json',
-                                    file_object=str(manifest),
+                                    file_object=io.BytesIO(str(manifest)),
                                     name='manifest.json',
                                     is_file=True,
                                     rights_holder=rights_holder,
