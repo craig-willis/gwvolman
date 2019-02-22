@@ -236,7 +236,7 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
 
     upload_file(client=dataone_client,
                 pid=manifest_pid,
-                file_object=io.BytesIO(str(manifest).encode()),
+                file_object=json.dumps(manifest),
                 system_metadata=meta)
 
     return manifest_pid, manifest_size
