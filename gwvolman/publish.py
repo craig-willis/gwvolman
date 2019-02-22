@@ -224,11 +224,12 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
     :return:
     """
     manifest = gc.get('/tale/{}/manifest'.format(tale_id))
+    manifest = json.dumps(manifest)
     manifest_pid = generate_dataone_guid()
     manifest_size = getsizeof(manifest)
     meta = generate_system_metadata(manifest_pid,
                                     format_id='application/json',
-                                    file_object=io.BytesIO(str(manifest).encode()),
+                                    file_object=io.BytesIO(manifest.encode()),
                                     name='manifest.json',
                                     is_file=True,
                                     rights_holder=rights_holder,
@@ -236,7 +237,7 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
 
     upload_file(client=dataone_client,
                 pid=manifest_pid,
-                file_object=json.dumps(manifest),
+                file_object=manifest,
                 system_metadata=meta)
 
     return manifest_pid, manifest_size

@@ -321,7 +321,7 @@ def create_minimum_eml(tale,
     if file_sizes.get('repository'):
         description = file_descriptions[ExtraFileNames.environment_file]
         name = ExtraFileNames.environment_file
-        object_format = 'application/tar+gzip'
+        object_format = 'application/x-gzip'
         add_object_record(dataset,
                           name,
                           description,
