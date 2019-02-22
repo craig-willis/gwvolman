@@ -489,9 +489,9 @@ def publish_tale(job_manager,
     for file in filtered_items['local_files']:
         local_file_pids.append(create_upload_object_metadata(client, file, user_id, gc))
         current_progress += file_progress_progression
-        job_manager.updateProgress(message='Uploading {}   Size: {} MB'.format(
+        job_manager.updateProgress(message=generate_size_progress_messaget(
             file['name'],
-            file['size']/1000000),
+            file['size']),
             total=100, current=current_progress)
 
     """
