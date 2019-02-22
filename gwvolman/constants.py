@@ -42,7 +42,7 @@ class ExtraFileNames:
       changed in a single place.
     """
     # Name for the tale config file
-    tale_config = 'tale.yml'
+    tale_config = 'manifest.json'
     license_filename = 'LICENSE'
     environment_file = 'docker-environment.tar.gz'
 

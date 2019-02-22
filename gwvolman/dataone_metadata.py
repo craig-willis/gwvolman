@@ -295,7 +295,7 @@ def create_minimum_eml(tale,
                           item['size'],
                           file['mimeType'])
 
-    # Add a section for the tale.yml file
+    # Add a section for the Tale manifest
     file_sizes.get('tale_manifest')
     description = file_descriptions[ExtraFileNames.tale_config]
     name = ExtraFileNames.tale_config
