@@ -517,7 +517,7 @@ def publish_tale(job_manager,
     job_manager.updateProgress(message='Generating tale metadata',
                                total=100,
                                current=current_progress)
-    tale_manifest_pid, tale_manifest_length = upload_manifest(tale,
+    tale_manifest_pid, tale_manifest_length = upload_manifest(str(tale['_id']),
                                                               user_id,
                                                               client,
                                                               gc)
