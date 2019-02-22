@@ -47,7 +47,7 @@ def createSimpleResourceMapCustom(ore_pid, scimeta_pid, sciobj_pid_list):
     """
 
     ore = ResourceMap(base_url=DATAONE_URL+'/cn')
-    ore.oreInitialize(ore_pid)
+    ore.initialize(ore_pid)
     ore.addMetadataDocument(scimeta_pid)
     ore.addDataDocuments(sciobj_pid_list, scimeta_pid)
     return ore
