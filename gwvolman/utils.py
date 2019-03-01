@@ -188,6 +188,8 @@ def _get_container_config(gc, tale):
         if tale['config']:
             tale_config.update(tale['config'])
 
+        digest=tale['imageInfo']['digest'] or ""
+
         try:
             mem_limit = size_notation_to_bytes(tale_config.get('memLimit', '2g'))
         except (ValueError, TypeError):
@@ -198,7 +200,7 @@ def _get_container_config(gc, tale):
             container_user=tale_config.get('user'),
             cpu_shares=tale_config.get('cpuShares'),
             environment=get_env_with_csp(tale_config),
-            image=tale['imageInfo']['digest'],
+            image=digest,
             mem_limit=mem_limit,
             target_mount=tale_config.get('targetMount'),
             url_path=tale_config.get('urlPath')

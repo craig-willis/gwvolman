@@ -145,13 +145,13 @@ def launch_container(self, payload):
     tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
 
     if 'imageInfo' not in tale:
+        logging.info("Building tale image")
 
         # Wait for image to be built
         tic = time.time()
-        timeout = 180.0
+        timeout = 360.0
 
         while time.time() - tic < timeout:
-
             logging.info("Waiting for image build to complete.")
 
             tale = self.girder_client.get('/tale/{taleId}'.format(**instance))
@@ -310,6 +310,7 @@ def build_tale_image(self, tale_id):
         self.girder_client.downloadFolderRecursive(
             workspace[0]['_id'], temp_dir)
 
+
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
     except KeyError:
@@ -318,6 +319,9 @@ def build_tale_image(self, tale_id):
     except girder_client.HttpError:
         logging.warn("Workspace folder not found for tale: %s", tale_id)
         pass
+
+    tale = self.girder_client.get('/tale/%s' % tale_id)
+    image = self.girder_client.get('/image/%s' % tale['imageId'])
 
     apicli = docker.APIClient(base_url='unix://var/run/docker.sock')
     apicli.login(username=REGISTRY_USER, password=REGISTRY_PASS,
@@ -338,9 +342,10 @@ def build_tale_image(self, tale_id):
     # user-name as BinderHub
     r2d_cmd = ('jupyter-repo2docker '
                '--target-repo-dir="/home/jovyan/work/workspace" '
-               '--user-id=1000 --user-name=jovyan '
-               '--no-clean --no-run '
-               '--image-name {} {}'.format(tag, temp_dir))
+               '--template={} --buildpack-name={} '
+               '--user-id=1000 --user-name={} '
+               '--no-clean --no-run --debug '
+               '--image-name {} {}'.format(image['config']['template'], image['config']['buildpack'], image['config']['user'], tag, temp_dir))
 
     logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
 
@@ -348,7 +353,7 @@ def build_tale_image(self, tale_id):
     # TODO: When repo2docker#545 and #546 are implemented, read the Image
     #       object to set the port and default command
     container = cli.containers.run(
-        image='jupyter/repo2docker:master',
+        image='craigwillis/repo2docker:latest',
         command=r2d_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
         privileged=True,
@@ -372,7 +377,7 @@ def build_tale_image(self, tale_id):
         logging.info(line.decode('utf-8'))
 
     # Remove the temporary directory
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    #shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get the image attributes
     image = cli.images.get(tag)
