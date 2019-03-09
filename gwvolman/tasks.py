@@ -201,8 +201,7 @@ def update_container(self, instanceId, **kwargs):
         return
 
     # Assume containers launched from gwvolman come from its configured registry
-    repoLoc = urlparse(DEPLOYMENT.registry_url).netloc
-    digest = repoLoc + '/' + kwargs['image']
+    digest = kwargs['image']
 
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
@@ -289,13 +288,14 @@ def build_tale_image(self, tale_id):
     try:
         logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
 
+        logging.info('GIRDER_API_URL {}'.format(GIRDER_API_URL))
         user = self.girder_client.get('/user/me')
-        logging.debug('Workspace user %s', user)
+        logging.info('Workspace user %s', user)
 
         path = '/collection/WholeTale Workspaces/WholeTale Workspaces'
         parent = self.girder_client.get('resource/lookup',
                                         parameters={'path': path})
-        logging.debug('Workspace parent %s', parent)
+        logging.info('Workspace parent %s', parent)
 
         workspace = self.girder_client.get(
             '/folder',
@@ -349,11 +349,12 @@ def build_tale_image(self, tale_id):
 
     logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
 
+
     # TODO: need to configure version of repo2docker
-    # TODO: When repo2docker#545 and #546 are implemented, read the Image
-    #       object to set the port and default command
+    repo2docker_version = 'craigwillis/repo2docker:latest'
+
     container = cli.containers.run(
-        image='craigwillis/repo2docker:latest',
+        image=repo2docker_version,
         command=r2d_cmd,
         environment=['DOCKER_HOST=unix:///var/run/docker.sock'],
         privileged=True,
@@ -369,23 +370,37 @@ def build_tale_image(self, tale_id):
         }
     )
 
+    # Job output must come from stdout/stderr
     for line in container.logs(stream=True):
-        logging.info(line.decode('utf-8'))
+        print(line.decode('utf-8'))
+
+    # Since detach=True, then we need to explicitly check for the 
+    # container exit code
+    ret = container.wait()
+
+    # Remove the temporary directory
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+    if ret['StatusCode'] != 0:
+        self.update_state(
+            state = states.FAILURE,
+            meta = 'Error building tale {}'.format(tale_id)
+        )
+        #raise ValueError('Error building tale {}'.format(tale_id))
+        return
 
     # Push the image
     for line in apicli.push(tag, stream=True):
         logging.info(line.decode('utf-8'))
-
-    # Remove the temporary directory
-    #shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get the image attributes
     image = cli.images.get(tag)
     digest = next((_ for _ in image.attrs['RepoDigests']
                    if _.startswith(urlparse(DEPLOYMENT.registry_url).netloc)), None)
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
+
     # Image digest used by updateBuildStatus handler
-    return digest
+    return {'image_digest': digest, 'repo2docker_version': repo2docker_version }
 
 
 @girder_job(title='Publish Tale')
