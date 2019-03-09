@@ -200,16 +200,17 @@ def update_container(self, instanceId, **kwargs):
         logging.info("Service not present [%s].", containerInfo['name'])
         return
 
-    # Assume containers launched from gwvolman come from its configured registry
     digest = kwargs['image']
 
     try:
         # NOTE: Only "image" passed currently, but this can be easily extended
         logging.info("Restarting container [%s].", service.name)
         service.update(image=digest)
-        logging.info("Restart command has been sent to Container [%s].", service.name)
+        logging.info("Restart command has been sent to Container [%s].",
+                     service.name)
     except Exception as e:
-        logging.error("Unable to send restart command to container [%s]: %s", service.id, e)
+        logging.error("Unable to send restart command to container [%s]: %s",
+                      service.id, e)
 
     return {'image_digest': digest}
 
@@ -286,7 +287,8 @@ def build_tale_image(self, tale_id):
     temp_dir = tempfile.mkdtemp(dir=HOSTDIR + '/tmp')
 
     try:
-        logging.info('Copying workspace contents to %s (%s)', temp_dir, tale_id)
+        logging.info('Copying workspace contents to %s (%s)', temp_dir,
+                     tale_id)
 
         logging.info('GIRDER_API_URL {}'.format(GIRDER_API_URL))
         user = self.girder_client.get('/user/me')
@@ -310,7 +312,6 @@ def build_tale_image(self, tale_id):
         self.girder_client.downloadFolderRecursive(
             workspace[0]['_id'], temp_dir)
 
-
     except Exception as e:
         raise ValueError('Error accessing Girder: {}'.format(e))
     except KeyError:
@@ -332,23 +333,26 @@ def build_tale_image(self, tale_id):
               registry=DEPLOYMENT.registry_url)
 
     # TODO: need either a --force-rebuild flag on repo2docker or some way
-    # to determine that the workspace contents have changed similar to 
+    # to determine that the workspace contents have changed similar to
     # the Git commit ID.
     tag = '{}/{}/{}'.format(urlparse(DEPLOYMENT.registry_url).netloc,
                             tale_id, str(int(time.time())))
 
     # Run repo2docker on the workspace using a shared temp directory. Note that
-    # this uses the "local" provider.  Use the same default user-id and 
+    # this uses the "local" provider.  Use the same default user-id and
     # user-name as BinderHub
     r2d_cmd = ('jupyter-repo2docker '
                '--target-repo-dir="/home/jovyan/work/workspace" '
                '--template={} --buildpack-name={} '
                '--user-id=1000 --user-name={} '
                '--no-clean --no-run --debug '
-               '--image-name {} {}'.format(image['config']['template'], image['config']['buildpack'], image['config']['user'], tag, temp_dir))
+               '--image-name {} {}'.format(
+                                           image['config']['template'],
+                                           image['config']['buildpack'],
+                                           image['config']['user'],
+                                           tag, temp_dir))
 
     logging.debug('Calling %s (%s)', r2d_cmd, tale_id)
-
 
     # TODO: need to configure version of repo2docker
     repo2docker_version = 'craigwillis/repo2docker:latest'
@@ -374,7 +378,7 @@ def build_tale_image(self, tale_id):
     for line in container.logs(stream=True):
         print(line.decode('utf-8'))
 
-    # Since detach=True, then we need to explicitly check for the 
+    # Since detach=True, then we need to explicitly check for the
     # container exit code
     ret = container.wait()
 
@@ -383,10 +387,10 @@ def build_tale_image(self, tale_id):
 
     if ret['StatusCode'] != 0:
         self.update_state(
-            state = states.FAILURE,
-            meta = 'Error building tale {}'.format(tale_id)
+            state=states.FAILURE,
+            meta='Error building tale {}'.format(tale_id)
         )
-        #raise ValueError('Error building tale {}'.format(tale_id))
+        # raise ValueError('Error building tale {}'.format(tale_id))
         return
 
     # Push the image
@@ -400,7 +404,7 @@ def build_tale_image(self, tale_id):
     logging.info('Successfully built image %s' % image.attrs['RepoDigests'][0])
 
     # Image digest used by updateBuildStatus handler
-    return {'image_digest': digest, 'repo2docker_version': repo2docker_version }
+    return {'image_digest': digest, 'repo2docker_version': repo2docker_version}
 
 
 @girder_job(title='Publish Tale')
