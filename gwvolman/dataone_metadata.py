@@ -5,7 +5,6 @@ import xml.etree.cElementTree as ET
 
 from .constants import \
     ExtraFileNames, \
-    license_text, \
     file_descriptions
 
 from .utils import \
@@ -126,19 +125,19 @@ def create_format(object_format, physical_section):
     ET.SubElement(externally_defined, 'formatName').text = object_format
 
 
-def create_intellectual_rights(dataset_element, license_id):
+def create_intellectual_rights(dataset_element, tale_license):
     """
     :param dataset_element: The xml element that defines the `dataset`
-    :param license_id: The ID of the license
+    :param tale_license: The Tale's license
     :type dataset_element: xml.etree.ElementTree.Element
-    :type license_id: str
+    :type tale_license: dict
     :return: None
     """
     intellectual_rights = ET.SubElement(dataset_element, 'intellectualRights')
     section = ET.SubElement(intellectual_rights, 'section')
     para = ET.SubElement(section, 'para')
     ET.SubElement(para, 'literalLayout').text = \
-        license_text.get(license_id, '')
+        tale_license['text']
 
 
 def add_object_record(root, name, description, size, object_format):
@@ -202,7 +201,7 @@ def create_minimum_eml(tale,
                        item_ids,
                        eml_pid,
                        file_sizes,
-                       license_id,
+                       tale_license,
                        user_id,
                        gc):
     """
@@ -215,7 +214,7 @@ def create_minimum_eml(tale,
     :param eml_pid: The PID for the eml document. Assume that this is the package doi
     :param file_sizes: When we upload files that are not in the girder system (ie not
      files or items) we need to manually pass their size in. Use this dict to do that.
-    :param license_id: The ID of the license
+    :param tale_license: The Tale's license
     :param user_id: The user's user id from the JWT
     girder items/files
     :param gc: The girder client
@@ -224,7 +223,7 @@ def create_minimum_eml(tale,
     :type item_ids: list
     :type eml_pid: str
     :type file_sizes: dict
-    :type license_id: str
+    :type tale_license: dict
     :type user_id: str
     :return: The EML as as string of bytes
     :rtype: bytes
@@ -276,7 +275,7 @@ def create_minimum_eml(tale,
         ET.SubElement(abstract, 'para').text = strip_html_tags(str(description))
 
     # Add a section for the license file
-    create_intellectual_rights(dataset, license_id)
+    create_intellectual_rights(dataset, tale_license)
 
     # Add a section for the contact
     contact = ET.SubElement(dataset, 'contact')
@@ -307,15 +306,14 @@ def create_minimum_eml(tale,
                       object_format)
 
     # Add a section for the license file
-    if file_sizes.get('license'):
-        description = file_descriptions[ExtraFileNames.license_filename]
-        name = ExtraFileNames.license_filename
-        object_format = 'text/plain'
-        add_object_record(dataset,
-                          name,
-                          description,
-                          file_sizes.get('license'),
-                          object_format)
+    description = file_descriptions[ExtraFileNames.license_filename]
+    name = ExtraFileNames.license_filename
+    object_format = 'text/plain'
+    add_object_record(dataset,
+                      name,
+                      description,
+                      len(tale_license['text']),
+                      object_format)
 
     # Add a section for the repository file
     if file_sizes.get('repository'):

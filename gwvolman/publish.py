@@ -34,7 +34,6 @@ from .dataone_metadata import \
 
 from .constants import \
     ExtraFileNames, \
-    license_files, \
     GIRDER_API_URL
 
 
@@ -42,7 +41,7 @@ def create_upload_eml(tale,
                       client,
                       user,
                       item_ids,
-                      license_id,
+                      tale_license,
                       user_id,
                       file_sizes,
                       gc):
@@ -55,7 +54,7 @@ def create_upload_eml(tale,
     :param client: The client to DataONE
     :param user: The user that is requesting this action
     :param item_ids: The ids of the items that have been uploaded to DataONE
-    :param license_id: The ID of the license
+    :param tale_license: The Tale's license
     :param user_id: The user that owns this resource
     :param file_sizes: We need to sometimes account for non-data files
      (like tale.yml) .The size needs to be in the EML record so pass them
@@ -65,7 +64,7 @@ def create_upload_eml(tale,
     :type client: MemberNodeClient_2_0
     :type user: girder.models.user
     :type item_ids: list
-    :type license_id: str
+    :type tale_license: dict
     :type user_id: str
     :type file_sizes: dict
     :return: pid of the EML document
@@ -79,7 +78,7 @@ def create_upload_eml(tale,
                                  item_ids,
                                  eml_pid,
                                  file_sizes,
-                                 license_id,
+                                 tale_license,
                                  user_id,
                                  gc)
     # Create the metadata describing the EML document
@@ -176,43 +175,32 @@ def create_upload_resmap(res_pid,
                 system_metadata=meta)
 
 
-def upload_license_file(client, license_id, rights_holder):
+def upload_license_file(client, tale_license, rights_holder, gc):
     """
     Upload a license file to DataONE.
 
     :param client: The client that interfaces DataONE
-    :param license_id: The ID of the license (see `ExtraFileNames` in constants)
+    :param tale_license: The Tale's license
     :param rights_holder: The owner of this object
     :type client: MemberNodeClient_2_0
-    :type license_id: str
+    :type tale_license: dict
     :type rights_holder: str
     :return: The pid and size of the license file
     """
-    # Holds the license text
-    license_text = str()
-    package_directory = os.path.dirname(os.path.abspath(__file__))
-    root_directory = os.path.dirname(package_directory)
-    # Path to the license file
-    license_path = os.path.join(root_directory, 'gwvolman', 'licenses',
-                                license_files[license_id])
-    try:
-        license_length = os.path.getsize(license_path)
-        with open(license_path) as f:
-            license_text = f.read()
-    except IOError as e:
-        logging.warning(e)
-        raise ValueError('There was an error processing the license.')
+
+    license_length = len(tale_license['text'])
 
     # Create a pid for the file
     pid = generate_dataone_guid()
     # Create system metadata for the file
     meta = generate_system_metadata(pid=pid,
                                     format_id='text/plain',
-                                    file_object=license_text,
+                                    file_object=tale_license['text'],
                                     name=ExtraFileNames.license_filename,
                                     rights_holder=rights_holder)
     # Upload the file
-    upload_file(client=client, pid=pid, file_object=license_text, system_metadata=meta)
+    upload_file(client=client, pid=pid, file_object=tale_license['text'],
+                system_metadata=meta)
 
     # Return the pid and length of the file
     return pid, license_length
@@ -382,15 +370,26 @@ def create_upload_remote_file(client, rights_holder, item_id, gc):
     return None
 
 
+def get_tale_license(gc, tale):
+    """
+    Gets the Tale's license
+    :param gc: The girder client
+    :param tale: The Tale being published
+    :return:
+    """
+    licenses = gc.get('/license')
+    tale_license = (x for x in licenses.json if (x['spdx'] == tale['licenseSPDX']))
+    return tale_license
+
+
+
 def publish_tale(job_manager,
                  item_ids,
                  tale_id,
                  dataone_node,
                  dataone_auth_token,
                  girder_token,
-                 girder_id,
-                 prov_info,
-                 license_id):
+                 girder_id):
     """
     Acts as the main function for publishing a Tale to DataONE.
     :param job_manager: Helper object that allows you to set the job progress
@@ -400,16 +399,12 @@ def publish_tale(job_manager,
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
     :param girder_id: The user's ID
-    :param prov_info: Additional information included in the tale yaml
-    :param license_id: The spdx of the license used
     :type item_ids: list
     :type tale_id: str
     :type dataone_node: str
     :type dataone_auth_token: str
     :type girder_token: str
-    :type girder_id: str
     :type prov_info: dict
-    :type license_id: str
     :return: The pid of the package's resource map
     :rtype: str
     """
@@ -489,7 +484,7 @@ def publish_tale(job_manager,
     for file in filtered_items['local_files']:
         local_file_pids.append(create_upload_object_metadata(client, file, user_id, gc))
         current_progress += file_progress_progression
-        job_manager.updateProgress(message=generate_size_progress_messaget(
+        job_manager.updateProgress(message=generate_size_progress_message(
             file['name'],
             file['size']),
             total=100, current=current_progress)
@@ -528,11 +523,12 @@ def publish_tale(job_manager,
     the resource map.
     """
     current_progress += 5
+    tale_license = get_tale_license(gc, tale)
     job_manager.updateProgress(message='Generating licence '
                                        'information.',
                                        total=100,
                                        current=current_progress)
-    license_pid, license_size = upload_license_file(client, license_id, user_id)
+    license_pid, license_size = upload_license_file(client, tale_license, user_id)
 
     """
     Upload the repository
@@ -545,7 +541,6 @@ def publish_tale(job_manager,
 
     # Create a dictionary that holds the miscellaneous files' sizes for the EML document
     file_sizes = {'tale_manifest': tale_manifest_length,
-                  'license': license_size,
                   'repository': repository_size}
 
     """
@@ -564,7 +559,7 @@ def publish_tale(job_manager,
                                 client,
                                 user,
                                 eml_items,
-                                license_id,
+                                tale_license,
                                 user_id,
                                 file_sizes,
                                 gc)
