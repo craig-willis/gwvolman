@@ -386,12 +386,7 @@ def build_tale_image(self, tale_id):
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     if ret['StatusCode'] != 0:
-        self.update_state(
-            state=states.FAILURE,
-            meta='Error building tale {}'.format(tale_id)
-        )
-        # raise ValueError('Error building tale {}'.format(tale_id))
-        return
+        raise ValueError('Error building tale {}'.format(tale_id))
 
     # Push the image
     for line in apicli.push(tag, stream=True):
