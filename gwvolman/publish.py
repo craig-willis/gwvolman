@@ -397,7 +397,7 @@ def get_tale_license(gc, tale):
     :return:
     """
     licenses = gc.get('/license')
-    tale_license = (x for x in licenses.json if (x['spdx'] == tale['licenseSPDX']))
+    tale_license = (x for x in licenses if (x['spdx'] == tale['licenseSPDX']))
     return tale_license
 
 
