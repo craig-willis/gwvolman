@@ -5,9 +5,9 @@ import json
 from sys import getsizeof
 
 try:
-    from urllib.request import urlopen
+    from urllib.request import urlopen, quote
 except ImportError:
-    from urllib2 import urlopen
+    from urllib2 import urlopen, quote
 from shutil import copyfileobj
 import os
 import girder_client
@@ -25,7 +25,9 @@ from .utils import \
     extract_user_name, \
     get_resource_map_user, \
     generate_dataone_guid, \
-    generate_size_progress_message
+    generate_size_progress_message, \
+    get_dataone_mimetype, \
+    retrieve_supported_mimetypes
 
 from .dataone_metadata import \
     generate_system_metadata, \
@@ -44,7 +46,8 @@ def create_upload_eml(tale,
                       tale_license,
                       user_id,
                       file_sizes,
-                      gc):
+                      gc,
+                      supported_types):
     """
     Creates the EML metadata document along with an additional metadata document
     and uploads them both to DataONE. A pid is created for the EML document, and is
@@ -80,7 +83,8 @@ def create_upload_eml(tale,
                                  file_sizes,
                                  tale_license,
                                  user_id,
-                                 gc)
+                                 gc,
+                                 supported_types)
     # Create the metadata describing the EML document
     meta = generate_system_metadata(pid=eml_pid,
                                     format_id='eml://ecoinformatics.org/eml-2.1.1',
@@ -206,12 +210,12 @@ def upload_license_file(client, tale_license, rights_holder, gc):
     return pid, license_length
 
 
-def upload_manifest(tale_id, rights_holder, dataone_client, gc):
+def upload_manifest(tale_id, item_ids, rights_holder, dataone_client, gc):
     """
 
     :return:
     """
-    manifest = gc.get('/tale/{}/manifest'.format(tale_id))
+    manifest = gc.get('/tale/{}/manifest/?itemIds={}'.format(tale_id, quote(json.dumps(item_ids))))
     manifest = json.dumps(manifest)
     manifest_pid = generate_dataone_guid()
     manifest_size = getsizeof(manifest)
@@ -231,7 +235,11 @@ def upload_manifest(tale_id, rights_holder, dataone_client, gc):
     return manifest_pid, manifest_size
 
 
-def create_upload_object_metadata(client, file_object, rights_holder, gc):
+def create_upload_object_metadata(client,
+                                  file_object,
+                                  rights_holder,
+                                  gc,
+                                  supported_types):
     """
     Takes a file that exists on the filesystem and
         1. Creates metadata describing it
@@ -243,9 +251,11 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
     :param file_object: The file object that will be uploaded
     :param rights_holder: The owner of this object
     :param gc: The girder client
+    :param supported_types: A list of supported mimetypes
     :type client: MemberNodeClient_2_0
     :type file_object: girder.models.file
     :type rights_holder: str
+    :type supported_types: list
     :return: The pid of the object
     :rtype: str
     """
@@ -256,7 +266,8 @@ def create_upload_object_metadata(client, file_object, rights_holder, gc):
         gc.downloadFile(str(file_object['_id']), temp_file)
         temp_file.seek(0)
         meta = generate_system_metadata(pid,
-                                        format_id=file_object['mimeType'],
+                                        format_id=get_dataone_mimetype(supported_types,
++                                                                       file_object['mimeType']),
                                         file_object=temp_file,
                                         name=file_object['name'],
                                         is_file=True,
@@ -323,7 +334,11 @@ def create_upload_repository(tale, client, rights_holder, gc):
     return None, 0
 
 
-def create_upload_remote_file(client, rights_holder, item_id, gc):
+def create_upload_remote_file(client,
+                              rights_holder,
+                              item_id,
+                              gc,
+                              supported_types):
     """
     Downloads a remote file and then uploads it to the repository pointed to by
     the client.
@@ -331,6 +346,7 @@ def create_upload_remote_file(client, rights_holder, item_id, gc):
     :param rights_holder: The owner of the object on DataONE
     :param item_id: The ID of the item that's being processed
     :param gc: The Girder Client
+    :param supported_types: List of supported mimetypes
     :return: str, None
     """
     file = get_file_item(item_id, gc)
@@ -349,10 +365,13 @@ def create_upload_remote_file(client, rights_holder, item_id, gc):
                     raise ValueError('Error copying environment file to disk.')
             # Create a pid for the file
                 pid = generate_dataone_guid()
+            # Get a valid DataONE mimetype
+            mimetype = get_dataone_mimetype(supported_types,
+                                            file['mimeType'])
             # Create system metadata for the file
                 temp_file.seek(0)
                 meta = generate_system_metadata(pid=pid,
-                                                format_id=file['mimeType'],
+                                                format_id=mimetype,
                                                 file_object=temp_file.read(),
                                                 name=file['name'],
                                                 rights_holder=rights_holder)
@@ -473,6 +492,10 @@ def publish_tale(job_manager,
         file_progress_progression = 40/file_count
     else:
         current_progress += 40
+
+    # Get a list of supported mimetypes
+    supported_types = retrieve_supported_mimetypes()
+
     """
     Iterate through the list of objects that are local (ie files without a `linkUrl`
      and upload them to the member node. The call to create_upload_object_metadata will
@@ -482,7 +505,11 @@ def publish_tale(job_manager,
     local_file_pids = list()
     current_progress += 5
     for file in filtered_items['local_files']:
-        local_file_pids.append(create_upload_object_metadata(client, file, user_id, gc))
+        local_file_pids.append(create_upload_object_metadata(client,
+                                                             file,
+                                                             user_id,
+                                                             gc,
+                                                             supported_types))
         current_progress += file_progress_progression
         job_manager.updateProgress(message=generate_size_progress_message(
             file['name'],
@@ -499,7 +526,8 @@ def publish_tale(job_manager,
         remote_file_pids.append(create_upload_remote_file(client,
                                                           user_id,
                                                           item_id,
-                                                          gc))
+                                                          gc,
+                                                          supported_types))
         current_progress += file_progress_progression
         job_manager.updateProgress(message=generate_size_progress_message(
             file['name'],
@@ -514,6 +542,7 @@ def publish_tale(job_manager,
                                total=100,
                                current=current_progress)
     tale_manifest_pid, tale_manifest_length = upload_manifest(str(tale['_id']),
+                                                              item_ids,
                                                               user_id,
                                                               client,
                                                               gc)
@@ -562,7 +591,8 @@ def publish_tale(job_manager,
                                 tale_license,
                                 user_id,
                                 file_sizes,
-                                gc)
+                                gc,
+                                supported_types)
 
     """
     Once all objects are uploaded, create and upload the resource map. This file describes

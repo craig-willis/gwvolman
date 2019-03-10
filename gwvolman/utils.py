@@ -14,6 +14,16 @@ import logging
 import jwt
 import hashlib
 import math
+import xml.etree.cElementTree as eTree
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib2 import urlopen
+
+try:
+    from urllib.request import Request
+except ImportError:
+    from urllib2 import Request
 
 try:
     from urlparse import urlparse
@@ -622,3 +632,36 @@ def generate_size_progress_message(name, size_bytes):
                                                           s,
                                                           size_name[i])
     return progress_message
+
+
+def retrieve_supported_mimetypes():
+    """
+    Returns a list of DataONE supported mimetypes. The endpoint returns
+    XML, which is parsed with ElementTree.
+    :return: A list of mimetypes
+    :rtype: list
+    """
+    response = urlopen(DATAONE_URL+'/v2/formats')
+    e = eTree.ElementTree(eTree.fromstring(response.read()))
+    root = e.getroot()
+    mime_types = set()
+
+    for element in root.iter('mediaType'):
+        mime_types.add(element.attrib['name'])
+
+    return mime_types
+
+
+def get_dataone_mimetype(supported_types, mimetype):
+    """
+
+    :param supported_types:
+    :param mimetype:
+    :return:
+    """
+    logging.info('Checking mimetype for: ')
+    logging.info(mimetype)
+    if mimetype not in supported_types:
+        logging.info('Not Supported')
+        return 'application/octet-stream'
+    return mimetype

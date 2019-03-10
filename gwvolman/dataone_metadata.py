@@ -13,7 +13,8 @@ from .utils import \
     get_directory, \
     get_file_item, \
     compute_md5, \
-    DATAONE_URL
+    DATAONE_URL, \
+    get_dataone_mimetype
 
 
 from d1_common.types import dataoneTypes
@@ -203,7 +204,8 @@ def create_minimum_eml(tale,
                        file_sizes,
                        tale_license,
                        user_id,
-                       gc):
+                       gc,
+                       supported_types):
     """
     Creates a bare minimum EML record for a package. Note that the
     ordering of the xml elements matters.
@@ -292,7 +294,8 @@ def create_minimum_eml(tale,
                           item['name'],
                           item.get('description', ''),
                           item['size'],
-                          file['mimeType'])
+                          get_dataone_mimetype(supported_types,
+                                               file['mimeType']))
 
     # Add a section for the Tale manifest
     file_sizes.get('tale_manifest')

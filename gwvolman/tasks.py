@@ -297,7 +297,7 @@ def publish(self,
             dataone_node,
             dataone_auth_token,
             girder_token,
-            userId)
+            userId):
     """
     :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
