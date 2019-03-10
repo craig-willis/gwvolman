@@ -398,7 +398,7 @@ def get_tale_license(gc, tale):
     """
     licenses = gc.get('/license')
     tale_license = (x for x in licenses if (x['spdx'] == tale['licenseSPDX']))
-    return tale_license
+    return next(tale_license)
 
 
 
