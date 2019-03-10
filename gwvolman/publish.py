@@ -366,8 +366,8 @@ def create_upload_remote_file(client,
             # Create a pid for the file
                 pid = generate_dataone_guid()
             # Get a valid DataONE mimetype
-            mimetype = get_dataone_mimetype(supported_types,
-                                            file['mimeType'])
+                mimetype = get_dataone_mimetype(supported_types,
+                                                file['mimeType'])
             # Create system metadata for the file
                 temp_file.seek(0)
                 meta = generate_system_metadata(pid=pid,
