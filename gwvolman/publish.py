@@ -179,7 +179,7 @@ def create_upload_resmap(res_pid,
                 system_metadata=meta)
 
 
-def upload_license_file(client, tale_license, rights_holder, gc):
+def upload_license_file(client, tale_license, rights_holder):
     """
     Upload a license file to DataONE.
 
