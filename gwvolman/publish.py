@@ -210,12 +210,12 @@ def upload_license_file(client, tale_license, rights_holder):
     return pid, license_length
 
 
-def upload_manifest(tale_id, item_ids, rights_holder, dataone_client, gc):
+def upload_manifest(tale_id, rights_holder, dataone_client, gc):
     """
 
     :return:
     """
-    manifest = gc.get('/tale/{}/manifest/?itemIds={}'.format(tale_id, quote(json.dumps(item_ids))))
+    manifest = gc.get('/tale/{}/manifest'.format(tale_id))
     manifest = json.dumps(manifest)
     manifest_pid = generate_dataone_guid()
     manifest_size = getsizeof(manifest)
@@ -267,7 +267,7 @@ def create_upload_object_metadata(client,
         temp_file.seek(0)
         meta = generate_system_metadata(pid,
                                         format_id=get_dataone_mimetype(supported_types,
-+                                                                       file_object['mimeType']),
+                                                                       file_object['mimeType']),
                                         file_object=temp_file,
                                         name=file_object['name'],
                                         is_file=True,
@@ -403,7 +403,6 @@ def get_tale_license(gc, tale):
 
 
 def publish_tale(job_manager,
-                 item_ids,
                  tale_id,
                  dataone_node,
                  dataone_auth_token,
@@ -412,13 +411,11 @@ def publish_tale(job_manager,
     """
     Acts as the main function for publishing a Tale to DataONE.
     :param job_manager: Helper object that allows you to set the job progress
-    :param item_ids: A list of item ids that are in the package
     :param tale_id: The tale Id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
     :param girder_id: The user's ID
-    :type item_ids: list
     :type tale_id: str
     :type dataone_node: str
     :type dataone_auth_token: str
@@ -427,11 +424,6 @@ def publish_tale(job_manager,
     :return: The pid of the package's resource map
     :rtype: str
     """
-
-    # If there aren't any files, exit
-    if not len(item_ids):
-        raise ValueError('There are no files in the Tale.')
-
     # Tracks the current progress level
     current_progress = 5
     job_manager.updateProgress(message='Establishing external connections',
@@ -449,7 +441,10 @@ def publish_tale(job_manager,
         raise ValueError('Failed to retrieve Tale.')
     user = gc.getUser(girder_id)
 
-    # create_dataone_client can throw DataONEException
+    if not user['admin']:
+        if tale['creatorId'] != user['_id']:
+            raise ValueError('Only the Tale creator may publish this Tale.')
+
     try:
         """
         Create a client object that is used to interface DataONE. This can interact with a
@@ -483,9 +478,9 @@ def publish_tale(job_manager,
     job_manager.updateProgress(message='Processing files',
                                total=100,
                                current=current_progress)
-    filtered_items = filter_items(item_ids, gc)
+    filtered_items = filter_items(tale, gc)
     # Get the total number of files for progress updating
-    file_count = len(filtered_items['remote']) + len(filtered_items['local_files'])
+    file_count = len(filtered_items['remote']) + len(filtered_items['local_items'])
     # Check if we have files to upload
     file_progress_progression = 0
     if file_count > 0:
@@ -495,6 +490,8 @@ def publish_tale(job_manager,
 
     # Get a list of supported mimetypes
     supported_types = retrieve_supported_mimetypes()
+    if not len(file_count + filtered_items['dataone']):
+        raise ValueError('There are no files in the Tale.')
 
     """
     Iterate through the list of objects that are local (ie files without a `linkUrl`
@@ -504,7 +501,8 @@ def publish_tale(job_manager,
     """
     local_file_pids = list()
     current_progress += 5
-    for file in filtered_items['local_files']:
+    for obj_item in filtered_items['local_items']:
+        file = get_file_item(obj_item, gc)
         local_file_pids.append(create_upload_object_metadata(client,
                                                              file,
                                                              user_id,
@@ -542,7 +540,6 @@ def publish_tale(job_manager,
                                total=100,
                                current=current_progress)
     tale_manifest_pid, tale_manifest_length = upload_manifest(str(tale['_id']),
-                                                              item_ids,
                                                               user_id,
                                                               client,
                                                               gc)

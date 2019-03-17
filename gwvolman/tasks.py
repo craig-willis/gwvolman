@@ -292,20 +292,17 @@ def build_image(image_id, repo_url, commit_id):
 @girder_job(title='Publish Tale')
 @app.task(bind=True)
 def publish(self,
-            item_ids,
             tale,
             dataone_node,
             dataone_auth_token,
             girder_token,
             userId):
     """
-    :param item_ids: A list of item ids that are in the package
     :param tale: The tale id
     :param dataone_node: The DataONE member node endpoint
     :param dataone_auth_token: The user's DataONE JWT
     :param girder_token: The user's girder token
     :param userId: The user's ID
-    :type item_ids: list
     :type tale: str
     :type dataone_node: str
     :type dataone_auth_token: str
@@ -313,7 +310,6 @@ def publish(self,
     :type userId: str
     """
     publish_tale(self.job_manager,
-                 item_ids,
                  tale,
                  dataone_node,
                  dataone_auth_token,

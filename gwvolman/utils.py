@@ -312,16 +312,35 @@ def get_file_item(item_id, gc):
 
 def from_dataone(gc, item_id):
     """
-    Checks if a url has dataone in it
-    :param url: The url in question
+    Checks if an item came from DataONE
+    :param gc: The Girder client
+    :param item_id: The item in question
     :return: True if it does, False otherwise
     """
     item = gc.getItem(item_id)
     folder = gc.getFolder(item['folderId'])
-    try:
-        return folder['meta']['provider'] == 'DataONE'
-    except KeyError:
-        return False
+    if folder:
+        try:
+            return folder['meta']['provider'] == 'DataONE'
+        except KeyError:
+            return False
+    return False
+
+
+def from_http(gc, item_id):
+    """
+    Check if an item came from Dataverse
+    :param gc: The Girder client
+    :param item_id: The item in question
+    :return: True if it does, False otherwise
+    """
+    item = gc.getItem(item_id)
+    if item:
+        try:
+            return item['meta']['provider'] == 'HTTP'
+        except KeyError:
+            return False
+    return False
 
 
 def check_pid(pid):
@@ -544,60 +563,110 @@ def get_item_identifier(item_id, gc):
         return config.get('identifier')
 
 
-def filter_items(item_ids, gc):
-    """
-    Take a list of item ids and determine whether it:
-       1. Exists on the local file system
-       2. Exists on DataONE
-       3. Is linked to a remote location other than DataONE
-    :param item_ids: A list of items to be processed
-    :param gc: The girder client
-    :type item_ids: list
-    :return: A dictionary of lists for each file location
-    For example,
-     {'dataone': ['uuid:123456', 'doi.10x501'],
-     'remote_objects: ['url1', 'url2'],
-     local: [file_obj1, file_obj2]}
-    :rtype: dict
-    """
+def filter_workspace(root_folder, gc, item_object=None):
+    if item_object is None:
+        item_object = set()
+    for obj in gc.listItem(root_folder):
+        item_object.add(obj['_id'])
+    for obj in gc.listFolder(root_folder):
+        temp_object = filter_workspace(obj['_id'], gc)
+        if len(temp_object):
+            item_object.update(temp_object)
+    return item_object
 
-    # Holds item_ids for DataONE objects
-    dataone_objects = list()
-    # Hold the DataONE pids
-    dataone_pids = list()
-    # Holds item_ids for files not in DataONE
-    remote_objects = list()
-    # Holds file dicts for local objects
-    local_objects = list()
-    # Holds item_ids for local files
-    local_items = list()
 
-    for item_id in item_ids:
-        # Check if it points do a dataone objbect
-        url = get_remote_url(item_id, gc)
+def filter_dataset(dataset_obj,
+                   gc,
+                   dataone_pids=None,
+                   dataone_items=None,
+                   http_items=None):
+    """
+    :param dataset_obj: Either a folder or item
+    :param gc: The Girder Client
+    :param dataone_pids: List of DataONE pids from Tale items
+    :param dataone_items: List of items that are referenced via DataONE
+    :param http_items: Items that point to http resources
+    :return:
+    """
+    if dataone_pids is None:
+        dataone_pids = set()
+    if dataone_items is None:
+        dataone_items = set()
+    if http_items is None:
+        http_items = set()
+
+    if dataset_obj['_modelType'] == 'item':
+        url = get_remote_url(dataset_obj['_id'], gc)
         if url:
-            if from_dataone(gc, item_id):
-                dataone_objects.append(item_id)
-                dataone_pids.append(get_item_identifier(item_id, gc))
-                continue
+            if from_dataone(gc, dataset_obj['_id']):
+                dataone_items.add(dataset_obj['_id'])
+                dataone_pids.add(get_item_identifier(dataset_obj['_id'], gc))
+            elif from_http(gc, dataset_obj['_id']):
+                http_items.add(dataset_obj['_id'])
 
-            """
-            If there is a url, and it's not pointing to a DataONE resource, then assume
-            it's pointing to an external object
-            """
-            remote_objects.append(item_id)
-            continue
+    elif dataset_obj['_modelType'] == 'folder':
+        for sub_item in gc.listItem(dataset_obj['_id']):
+            temp_http, temp_dataone_items, temp_pids = filter_dataset(sub_item,
+                                                                      gc,
+                                                                      dataone_pids,
+                                                                      dataone_items,
+                                                                      http_items)
+            if len(temp_http):
+                http_items.update(temp_http)
+            if len(temp_dataone_items):
+                dataone_items.update(temp_dataone_items)
+            if len(temp_pids):
+                dataone_pids.update(temp_pids)
+    return http_items, dataone_items, dataone_pids
 
-        # If the file wasn't linked to a remote location, then it must exist locally. This
-        # is a list of girder.models.File objects
-        local_objects.append(get_file_item(item_id, gc))
-        local_items.append(item_id)
 
-    return {'dataone': dataone_objects,
-            'dataone_pids': dataone_pids,
-            'remote': remote_objects,
-            'local_files': local_objects,
-            'local_items': local_items}
+def filter_items(tale, gc):
+    """
+    Take the dataSet and workspace and sort the items by
+    location (HTTP, dataone, local).
+    """
+    # Holds item_ids for DataONE objects
+    dataone_items = set()
+    # Hold the DataONE pids
+    dataone_pids = set()
+    # Holds item_ids for files not in DataONE
+    http_items = set()
+
+    # Handle the workspace
+    local_items = set()
+    local_items = filter_workspace(tale['workspaceId'], gc)
+    # Handle the dataSet
+    for obj in tale['dataSet']:
+        if obj['_modelType'] == 'item':
+            temp_http, temp_dataone_items, temp_pids =\
+                filter_dataset(gc.getItem(obj['itemId']),
+                               gc,
+                               dataone_pids,
+                               dataone_items,
+                               http_items)
+            if len(temp_http):
+                http_items.update(temp_http)
+            if len(temp_dataone_items):
+                dataone_items.update(temp_dataone_items)
+            if len(temp_pids):
+                dataone_pids.update(temp_pids)
+        elif obj['_modelType'] == 'folder':
+            temp_http, temp_dataone_items, temp_pids =\
+                filter_dataset(gc.getFolder(obj['itemId']),
+                               gc,
+                               dataone_pids,
+                               dataone_items,
+                               http_items)
+            if len(temp_http):
+                http_items.update(temp_http)
+            if len(temp_dataone_items):
+                dataone_items.update(temp_dataone_items)
+            if len(temp_pids):
+                dataone_pids.update(temp_pids)
+    return {'dataone': list(set(dataone_items)),
+            'dataone_pids': list(set(dataone_pids)),
+            'remote': list(set(http_items)),
+            'local_items': list(set(local_items))}
 
 
 def generate_dataone_guid():
@@ -659,9 +728,6 @@ def get_dataone_mimetype(supported_types, mimetype):
     :param mimetype:
     :return:
     """
-    logging.info('Checking mimetype for: ')
-    logging.info(mimetype)
     if mimetype not in supported_types:
-        logging.info('Not Supported')
         return 'application/octet-stream'
     return mimetype
